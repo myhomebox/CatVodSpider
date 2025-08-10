@@ -1,14 +1,13 @@
-name: Build JAR
+name: Build Root Gradle Project
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   workflow_dispatch:  # 允许手动触发
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -17,16 +16,21 @@ jobs:
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
-        java-version: '17'  # 修改为你的JDK版本
+        java-version: '17'  # 改为你的JDK版本
 
-    - name: Grant Gradle permission
-      run: chmod +x gradlew  # 给Gradle Wrapper执行权限
+    # 根目录直接执行构建
+    - name: Build Gradle Project
+      run: |
+        # 添加执行权限（如果使用 Gradle Wrapper）
+        if [ -f "gradlew" ]; then
+          chmod +x gradlew
+          ./gradlew build -x test
+        else
+          gradle build -x test
+        fi
 
-    - name: Build with Gradle
-      run: ./gradlew build  # 执行编译
-
-    - name: Upload JAR artifact
+    - name: Upload JAR Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: generated-jar
-        path: build/libs/*.jar  # 自动上传所有生成的JAR
+        name: jar-artifact
+        path: build/libs/*.jar  # 根目录下的输出路径
