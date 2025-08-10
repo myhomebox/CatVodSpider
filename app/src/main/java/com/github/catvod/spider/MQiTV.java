@@ -53,18 +53,38 @@ public class MQiTV extends Spider {
         String ip = params.get("ip");
         String port = params.get("port");
         String playing = params.get("playing");
+        String originalPort = port;
+        
         if (port == null) port = "5003";
+        
         Config config = getConfig(ip);
         String token = config.getUser().getToken();
+        
         if (token.isEmpty()) {
             return get302(config.getPlayUrl(port, playing));
         } else {
             String id = params.get("id");
             String auth = config.getAuth(id, token);
-            if (!"OK".equals(auth)) config.clear();
-            if (!"OK".equals(auth)) return proxy(params);
+            
+            if (!"OK".equals(auth)) {
+                config.clear();
+                return proxy(params);
+            }
+            
             String m3u8 = config.getM3U8(id, token, port);
-            return m3u8.isEmpty() ? get302(config.getPlayUrl(port, playing)) : get200(m3u8);
+            
+            if (m3u8.isEmpty() && !"5003".equals(port)) {
+
+                m3u8 = config.getM3U8(id, token, "5003");
+                
+                if (!m3u8.isEmpty()) {
+                    port = "5003";
+                }
+            }
+            
+            return m3u8.isEmpty() ? 
+                get302(config.getPlayUrl(port, playing)) : 
+                get200(m3u8);
         }
     }
 
