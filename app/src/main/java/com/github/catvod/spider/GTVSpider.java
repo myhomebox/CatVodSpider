@@ -14,6 +14,10 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
@@ -325,9 +329,9 @@ public class GTVSpider extends Spider {
             payload.put("fsPASSWORD", password);
             payload.put("fsENC_KEY", fsencKey);
             
-            OkResult result = OkHttp.post(url, payload.toString(), headers);
-            if (result != null && result.code == 200) {
-                JSONObject json = new JSONObject(result.body);
+            String response = httpPost(url, payload.toString(), headers);
+            if (response != null) {
+                JSONObject json = new JSONObject(response);
                 if (json.optBoolean("Success", false)) {
                     return json.getJSONObject("Data").optString("fsVALUE", "");
                 }
@@ -350,9 +354,9 @@ public class GTVSpider extends Spider {
             headers.put("referer", "https://www.4gtv.tv/");
             headers.put("User-Agent", DEFAULT_USER_AGENT);
             
-            OkResult result = OkHttp.get(url, headers);
-            if (result != null && result.code == 200) {
-                JSONObject json = new JSONObject(result.body);
+            String response = httpGet(url, headers);
+            if (response != null) {
+                JSONObject json = new JSONObject(response);
                 Map<String, String> channels = new HashMap<>();
                 if (json.optBoolean("Success", false)) {
                     JSONArray data = json.getJSONArray("Data");
@@ -401,9 +405,9 @@ public class GTVSpider extends Spider {
             payload.put("fsASSET_ID", channelId);
             payload.put("fsDEVICE_TYPE", "mobile");
             
-            OkResult result = OkHttp.post(url, payload.toString(), headers);
-            if (result != null && result.code == 200) {
-                JSONObject json = new JSONObject(result.body);
+            String response = httpPost(url, payload.toString(), headers);
+            if (response != null) {
+                JSONObject json = new JSONObject(response);
                 if (json.optBoolean("Success", false)) {
                     JSONObject data = json.getJSONObject("Data");
                     JSONArray urls = data.getJSONArray("flstURLs");
@@ -424,6 +428,78 @@ public class GTVSpider extends Spider {
         // 这里简化实现，实际应该从API获取最高码率信息
         // 暂时返回原始URL
         return masterUrl;
+    }
+
+    // 使用 Java 标准库实现 HTTP GET 请求
+    private String httpGet(String urlString, Map<String, String> headers) {
+        try {
+            URL url = new URL(urlString);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(DEFAULT_TIMEOUT * 1000);
+            connection.setReadTimeout(DEFAULT_TIMEOUT * 1000);
+            
+            // 设置请求头
+            for (Map.Entry<String, String> entry : headers.entrySet()) {
+                connection.setRequestProperty(entry.getKey(), entry.getValue());
+            }
+            
+            int responseCode = connection.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                String inputLine;
+                StringBuilder response = new StringBuilder();
+                
+                while ((inputLine = in.readLine()) != null) {
+                    response.append(inputLine);
+                }
+                in.close();
+                
+                return response.toString();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    // 使用 Java 标准库实现 HTTP POST 请求
+    private String httpPost(String urlString, String jsonData, Map<String, String> headers) {
+        try {
+            URL url = new URL(urlString);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(DEFAULT_TIMEOUT * 1000);
+            connection.setReadTimeout(DEFAULT_TIMEOUT * 1000);
+            connection.setDoOutput(true);
+            
+            // 设置请求头
+            for (Map.Entry<String, String> entry : headers.entrySet()) {
+                connection.setRequestProperty(entry.getKey(), entry.getValue());
+            }
+            
+            // 发送请求体
+            byte[] postData = jsonData.getBytes(StandardCharsets.UTF_8);
+            connection.setRequestProperty("Content-Length", Integer.toString(postData.length));
+            connection.getOutputStream().write(postData);
+            
+            int responseCode = connection.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                String inputLine;
+                StringBuilder response = new StringBuilder();
+                
+                while ((inputLine = in.readLine()) != null) {
+                    response.append(inputLine);
+                }
+                in.close();
+                
+                return response.toString();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
     private static class CacheEntry {
