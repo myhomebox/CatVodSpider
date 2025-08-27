@@ -31,11 +31,11 @@ import javax.crypto.spec.SecretKeySpec;
 
 public class GTV extends Spider {
 
-    private static final String DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
+    private static final String DEFAULT_USER_AGENT = "四季線上/4 CFNetwork/3826.500.131 Darwin/24.5.0";
     private static final int DEFAULT_TIMEOUT = 30;
     private static final int CHANNEL_DELAY = 3;
     private static final int MAX_RETRIES = 3;
-    private static final long CACHE_EXPIRATION_TIME = 86400000; // 24小時
+    private static final long CACHE_EXPIRATION_TIME = 86400000; // 24小时
 
     private String user;
     private String password;
@@ -43,8 +43,6 @@ public class GTV extends Spider {
     private int timeout;
     
     private static Map<String, CacheItem> cachePlayUrls = new ConcurrentHashMap<>();
-    private static Map<String, String> cloudflareCookies = new ConcurrentHashMap<>();
-    private static long lastCookieUpdate = 0;
 
     @Override
     public void init(Context context, String extend) {
@@ -90,12 +88,7 @@ public class GTV extends Spider {
     @Override
     public String liveContent() throws Exception {
         if (user.isEmpty() || password.isEmpty()) {
-            return "賬號或密碼未設置";
-        }
-
-        if (System.currentTimeMillis() - lastCookieUpdate > 1800000) {
-            updateCloudflareCookies();
-            lastCookieUpdate = System.currentTimeMillis();
+            return "账号或密码未设置";
         }
 
         String fsencKey = generateUuid(user);
@@ -103,22 +96,18 @@ public class GTV extends Spider {
         String fsValue = signIn4Gtv(user, password, fsencKey, authVal, ua, timeout);
 
         if (fsValue == null || fsValue.isEmpty()) {
-            return "登錄失敗";
+            return "登录失败";
         }
 
         List<Channel> channels = getAllChannels(ua, timeout);
         StringBuilder sb = new StringBuilder();
         sb.append("#EXTM3U\n");
 
-        int successCount = 0;
-        int totalCount = 0;
-
         for (Channel channel : channels) {
             if (!channel.fs4GTV_ID.startsWith("4gtv-live")) {
                 continue;
             }
 
-            totalCount++;
             Thread.sleep(CHANNEL_DELAY * 1000);
 
             String streamUrl = get4GtvChannelUrlWithRetry(
@@ -137,11 +126,9 @@ public class GTV extends Spider {
                 sb.append(String.format("#EXTINF:-1 tvg-id=\"%s\" tvg-name=\"%s\" tvg-logo=\"%s\" group-title=\"%s\",%s\n",
                     channel.fsNAME, channel.fsNAME, channel.fsLOGO_MOBILE, channel.fsTYPE_NAME, channel.fsNAME));
                 sb.append("proxy://do=gtv&url=").append(URLEncoder.encode(highestUrl, "UTF-8")).append("\n");
-                successCount++;
             }
         }
 
-        sb.append("\n# 統計信息: 成功獲取 ").append(successCount).append(" / ").append(totalCount).append(" 個頻道");
         return sb.toString();
     }
 
@@ -149,106 +136,13 @@ public class GTV extends Spider {
         try {
             String url = params.get("url");
             if (url != null && !url.isEmpty()) {
-
                 Map<String, String> headers = new HashMap<>();
                 headers.put("User-Agent", DEFAULT_USER_AGENT);
                 headers.put("Referer", "https://www.4gtv.tv/");
                 headers.put("Origin", "https://www.4gtv.tv/");
                 
-
-                StringBuilder cookieHeader = new StringBuilder();
-                for (Map.Entry<String, String> entry : cloudflareCookies.entrySet()) {
-                    if (cookieHeader.length() > 0) cookieHeader.append("; ");
-                    cookieHeader.append(entry.getKey()).append("=").append(entry.getValue());
-                }
-                if (cookieHeader.length() > 0) {
-                    headers.put("Cookie", cookieHeader.toString());
-                }
-                
                 String content = OkHttp.string(url, headers);
                 return new Object[]{200, "application/vnd.apple.mpegurl", new java.io.ByteArrayInputStream(content.getBytes())};
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-    private void updateCloudflareCookies() {
-        try {
-
-            Map<String, String> headers = new HashMap<>();
-            headers.put("User-Agent", DEFAULT_USER_AGENT);
-            
-            OkHttp.Response response = OkHttp.get("https://www.4gtv.tv/", headers);
-            if (response != null && response.headers != null) {
-                List<String> cookieHeaders = response.headers.get("Set-Cookie");
-                if (cookieHeaders != null) {
-                    for (String cookie : cookieHeaders) {
-
-                        if (cookie.contains("__cf") || cookie.contains("cf_")) {
-                            String[] parts = cookie.split(";")[0].split("=");
-                            if (parts.length >= 2) {
-                                cloudflareCookies.put(parts[0], parts[1]);
-                            }
-                        }
-                    }
-                }
-            }
-            
-            try {
-                String jsChallenge = extractJsChallenge(response.body);
-                if (jsChallenge != null) {
-                    String answer = solveJsChallenge(jsChallenge);
-                    if (answer != null) {
-                        String verifyUrl = "https://www.4gtv.tv/cdn-cgi/challenge-platform/h/g/flow/ov1/" + 
-                                          "0.1:10000000:" + System.currentTimeMillis() + ":" + answer;
-                        OkHttp.get(verifyUrl, headers);
-                    }
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    private String extractJsChallenge(String html) {
-        if (html == null) return null;
-        
-        Pattern pattern = Pattern.compile("setTimeout\\(function\\(\\)\\{\\s*var.*?\\s*\\+\\s*(.*?)\\s*\\+.*?;\\s*\\},.*?\\);");
-        Matcher matcher = pattern.matcher(html);
-        if (matcher.find()) {
-            return matcher.group(1);
-        }
-        
-        return null;
-    }
-
-    private String solveJsChallenge(String challenge) {
-        try {
-
-            if (challenge.contains("/")) {
-                String[] parts = challenge.split("/");
-                if (parts.length == 3) {
-                    String part1 = parts[0].trim();
-                    String part2 = parts[1].trim();
-                    String part3 = parts[2].trim();
-                    
-                    Pattern numPattern = Pattern.compile("\\d+");
-                    Matcher m1 = numPattern.matcher(part1);
-                    Matcher m2 = numPattern.matcher(part2);
-                    Matcher m3 = numPattern.matcher(part3);
-                    
-                    if (m1.find() && m2.find() && m3.find()) {
-                        int num1 = Integer.parseInt(m1.group());
-                        int num2 = Integer.parseInt(m2.group());
-                        int num3 = Integer.parseInt(m3.group());
-                        
-                        return String.valueOf(num1 + num2 + num3);
-                    }
-                }
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -309,16 +203,6 @@ public class GTV extends Spider {
             headers.put("fsversion", "3.2.8");
             headers.put("4gtv_auth", authVal);
             headers.put("User-Agent", ua);
-            
-            // 添加 CloudFlare cookies
-            StringBuilder cookieHeader = new StringBuilder();
-            for (Map.Entry<String, String> entry : cloudflareCookies.entrySet()) {
-                if (cookieHeader.length() > 0) cookieHeader.append("; ");
-                cookieHeader.append(entry.getKey()).append("=").append(entry.getValue());
-            }
-            if (cookieHeader.length() > 0) {
-                headers.put("Cookie", cookieHeader.toString());
-            }
 
             JsonObject payload = new JsonObject();
             payload.addProperty("fsUSER", user);
@@ -345,16 +229,6 @@ public class GTV extends Spider {
             headers.put("origin", "https://www.4gtv.tv");
             headers.put("referer", "https://www.4gtv.tv/");
             headers.put("User-Agent", ua);
-            
-            // 添加 CloudFlare cookies
-            StringBuilder cookieHeader = new StringBuilder();
-            for (Map.Entry<String, String> entry : cloudflareCookies.entrySet()) {
-                if (cookieHeader.length() > 0) cookieHeader.append("; ");
-                cookieHeader.append(entry.getKey()).append("=").append(entry.getValue());
-            }
-            if (cookieHeader.length() > 0) {
-                headers.put("Cookie", cookieHeader.toString());
-            }
 
             String result = OkHttp.string(url, headers);
             JsonObject json = new Gson().fromJson(result, JsonObject.class);
@@ -400,16 +274,7 @@ public class GTV extends Spider {
                 headers.put("4gtv_auth", authVal);
                 headers.put("Referer", "https://www.4gtv.tv/");
                 headers.put("User-Agent", ua);
-                
-                // 添加 CloudFlare cookies
-                StringBuilder cookieHeader = new StringBuilder();
-                for (Map.Entry<String, String> entry : cloudflareCookies.entrySet()) {
-                    if (cookieHeader.length() > 0) cookieHeader.append("; ");
-                    cookieHeader.append(entry.getKey()).append("=").append(entry.getValue());
-                }
-                if (cookieHeader.length() > 0) {
-                    headers.put("Cookie", cookieHeader.toString());
-                }
+                headers.put("X-Forwarded-For", "49.159.74.105");
 
                 JsonObject clsApp = new JsonObject();
                 clsApp.addProperty("fsVALUE", fsValue);
