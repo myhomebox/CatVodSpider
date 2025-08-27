@@ -175,7 +175,7 @@ public class GTV extends Spider {
                 }
                 
                 OkResult result = OkHttp.get(url, headers);
-                if (result != null && result.isSuccessful()) {
+                if (result != null) {
                     return new Object[]{200, "application/vnd.apple.mpegurl", new java.io.ByteArrayInputStream(result.getBody().getBytes())};
                 }
             }
@@ -192,7 +192,7 @@ public class GTV extends Spider {
             headers.put("User-Agent", DEFAULT_USER_AGENT);
             
             OkResult result = OkHttp.get("https://www.4gtv.tv/", headers);
-            if (result != null && result.isSuccessful()) {
+            if (result != null) {
                 String response = result.getBody();
                 
                 // 尝试从响应中提取 cookies
@@ -337,7 +337,7 @@ public class GTV extends Spider {
             payload.addProperty("fsENC_KEY", fsencKey);
 
             OkResult okResult = OkHttp.post(url, new Gson().toJson(payload), headers);
-            if (okResult != null && okResult.isSuccessful()) {
+            if (okResult != null) {
                 String result = okResult.getBody();
                 JsonObject json = new Gson().fromJson(result, JsonObject.class);
                 if (json != null && json.has("Success") && json.get("Success").getAsBoolean()) {
@@ -371,7 +371,7 @@ public class GTV extends Spider {
             }
 
             OkResult result = OkHttp.get(url, headers);
-            if (result != null && result.isSuccessful()) {
+            if (result != null) {
                 String response = result.getBody();
                 JsonObject json = new Gson().fromJson(response, JsonObject.class);
                 if (json != null && json.has("Success") && json.get("Success").getAsBoolean()) {
@@ -440,7 +440,7 @@ public class GTV extends Spider {
                 payload.addProperty("fsDEVICE_TYPE", "mobile");
 
                 OkResult okResult = OkHttp.post(url, new Gson().toJson(payload), headers);
-                if (okResult != null && okResult.isSuccessful()) {
+                if (okResult != null) {
                     String result = okResult.getBody();
                     JsonObject json = new Gson().fromJson(result, JsonObject.class);
                     if (json != null && json.has("Success") && json.get("Success").getAsBoolean()) {
