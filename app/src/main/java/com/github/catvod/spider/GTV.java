@@ -31,7 +31,7 @@ import javax.crypto.spec.SecretKeySpec;
 
 public class GTV extends Spider {
 
-    private static final String DEFAULT_USER_AGENT = "四季線上/4 CFNetwork/3826.500.131 Darwin/24.5.0";
+    private static final String DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
     private static final int DEFAULT_TIMEOUT = 30;
     private static final int CHANNEL_DELAY = 3;
     private static final int MAX_RETRIES = 3;
@@ -43,6 +43,8 @@ public class GTV extends Spider {
     private int timeout;
     
     private static Map<String, CacheItem> cachePlayUrls = new ConcurrentHashMap<>();
+    private static Map<String, String> cloudflareCookies = new ConcurrentHashMap<>();
+    private static long lastCookieUpdate = 0;
 
     @Override
     public void init(Context context, String extend) {
@@ -61,34 +63,39 @@ public class GTV extends Spider {
     }
 
     @Override
-    public String homeContent(boolean filter) throws Exception {
+    public String homeContent(boolean filter) {
         return "{}";
     }
 
     @Override
-    public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) throws Exception {
+    public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) {
         return "{}";
     }
 
     @Override
-    public String detailContent(List<String> ids) throws Exception {
+    public String detailContent(List<String> ids) {
         return "{}";
     }
 
     @Override
-    public String searchContent(String key, boolean quick) throws Exception {
+    public String searchContent(String key, boolean quick) {
         return "{}";
     }
 
     @Override
-    public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
+    public String playerContent(String flag, String id, List<String> vipFlags) {
         return "{}";
     }
 
-    @Override
-    public String liveContent() throws Exception {
+    public String liveContent() {
         if (user.isEmpty() || password.isEmpty()) {
             return "账号或密码未设置";
+        }
+
+        // 更新 CloudFlare cookies (每30分钟更新一次)
+        if (System.currentTimeMillis() - lastCookieUpdate > 1800000) {
+            updateCloudflareCookies();
+            lastCookieUpdate = System.currentTimeMillis();
         }
 
         String fsencKey = generateUuid(user);
@@ -103,12 +110,20 @@ public class GTV extends Spider {
         StringBuilder sb = new StringBuilder();
         sb.append("#EXTM3U\n");
 
+        int successCount = 0;
+        int totalCount = 0;
+
         for (Channel channel : channels) {
             if (!channel.fs4GTV_ID.startsWith("4gtv-live")) {
                 continue;
             }
 
-            Thread.sleep(CHANNEL_DELAY * 1000);
+            totalCount++;
+            try {
+                Thread.sleep(CHANNEL_DELAY * 1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
 
             String streamUrl = get4GtvChannelUrlWithRetry(
                 channel.fs4GTV_ID, 
@@ -125,10 +140,16 @@ public class GTV extends Spider {
                 String highestUrl = getHighestBitrateUrl(streamUrl);
                 sb.append(String.format("#EXTINF:-1 tvg-id=\"%s\" tvg-name=\"%s\" tvg-logo=\"%s\" group-title=\"%s\",%s\n",
                     channel.fsNAME, channel.fsNAME, channel.fsLOGO_MOBILE, channel.fsTYPE_NAME, channel.fsNAME));
-                sb.append("proxy://do=gtv&url=").append(URLEncoder.encode(highestUrl, "UTF-8")).append("\n");
+                try {
+                    sb.append("proxy://do=gtv&url=").append(URLEncoder.encode(highestUrl, "UTF-8")).append("\n");
+                } catch (Exception e) {
+                    sb.append(highestUrl).append("\n");
+                }
+                successCount++;
             }
         }
 
+        sb.append("\n# 统计信息: 成功获取 ").append(successCount).append(" / ").append(totalCount).append(" 个频道");
         return sb.toString();
     }
 
@@ -136,13 +157,103 @@ public class GTV extends Spider {
         try {
             String url = params.get("url");
             if (url != null && !url.isEmpty()) {
+                // 使用带有 CloudFlare cookie 的请求
                 Map<String, String> headers = new HashMap<>();
                 headers.put("User-Agent", DEFAULT_USER_AGENT);
                 headers.put("Referer", "https://www.4gtv.tv/");
                 headers.put("Origin", "https://www.4gtv.tv/");
                 
+                // 添加 CloudFlare cookies
+                StringBuilder cookieHeader = new StringBuilder();
+                for (Map.Entry<String, String> entry : cloudflareCookies.entrySet()) {
+                    if (cookieHeader.length() > 0) cookieHeader.append("; ");
+                    cookieHeader.append(entry.getKey()).append("=").append(entry.getValue());
+                }
+                if (cookieHeader.length() > 0) {
+                    headers.put("Cookie", cookieHeader.toString());
+                }
+                
                 String content = OkHttp.string(url, headers);
                 return new Object[]{200, "application/vnd.apple.mpegurl", new java.io.ByteArrayInputStream(content.getBytes())};
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    private void updateCloudflareCookies() {
+        try {
+            // 访问首页获取 CloudFlare cookies
+            Map<String, String> headers = new HashMap<>();
+            headers.put("User-Agent", DEFAULT_USER_AGENT);
+            
+            String response = OkHttp.string("https://www.4gtv.tv/", headers);
+            
+            // 尝试从响应中提取 cookies
+            // 注意: 这里简化处理，实际可能需要解析 Set-Cookie 头
+            if (response != null) {
+                // 尝试获取清除挑战 cookie
+                try {
+                    String jsChallenge = extractJsChallenge(response);
+                    if (jsChallenge != null) {
+                        String answer = solveJsChallenge(jsChallenge);
+                        if (answer != null) {
+                            // 提交答案获取验证 cookie
+                            String verifyUrl = "https://www.4gtv.tv/cdn-cgi/challenge-platform/h/g/flow/ov1/" + 
+                                              "0.1:10000000:" + System.currentTimeMillis() + ":" + answer;
+                            OkHttp.string(verifyUrl, headers);
+                        }
+                    }
+                } catch (Exception e) {
+                    // 如果 JS 挑战解析失败，继续使用基本 cookies
+                    e.printStackTrace();
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private String extractJsChallenge(String html) {
+        if (html == null) return null;
+        
+        // 查找 CloudFlare JavaScript 挑战
+        Pattern pattern = Pattern.compile("setTimeout\\(function\\(\\)\\{\\s*var.*?\\s*\\+\\s*(.*?)\\s*\\+.*?;\\s*\\},.*?\\);");
+        Matcher matcher = pattern.matcher(html);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        
+        return null;
+    }
+
+    private String solveJsChallenge(String challenge) {
+        try {
+            // 简单的 JS 表达式求值
+            // 注意：这只是简化版，实际 CloudFlare 挑战可能更复杂
+            if (challenge.contains("/")) {
+                String[] parts = challenge.split("/");
+                if (parts.length == 3) {
+                    String part1 = parts[0].trim();
+                    String part2 = parts[1].trim();
+                    String part3 = parts[2].trim();
+                    
+                    // 提取数字
+                    Pattern numPattern = Pattern.compile("\\d+");
+                    Matcher m1 = numPattern.matcher(part1);
+                    Matcher m2 = numPattern.matcher(part2);
+                    Matcher m3 = numPattern.matcher(part3);
+                    
+                    if (m1.find() && m2.find() && m3.find()) {
+                        int num1 = Integer.parseInt(m1.group());
+                        int num2 = Integer.parseInt(m2.group());
+                        int num3 = Integer.parseInt(m3.group());
+                        
+                        // 简单计算
+                        return String.valueOf(num1 + num2 + num3);
+                    }
+                }
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -203,13 +314,23 @@ public class GTV extends Spider {
             headers.put("fsversion", "3.2.8");
             headers.put("4gtv_auth", authVal);
             headers.put("User-Agent", ua);
+            
+            // 添加 CloudFlare cookies
+            StringBuilder cookieHeader = new StringBuilder();
+            for (Map.Entry<String, String> entry : cloudflareCookies.entrySet()) {
+                if (cookieHeader.length() > 0) cookieHeader.append("; ");
+                cookieHeader.append(entry.getKey()).append("=").append(entry.getValue());
+            }
+            if (cookieHeader.length() > 0) {
+                headers.put("Cookie", cookieHeader.toString());
+            }
 
             JsonObject payload = new JsonObject();
             payload.addProperty("fsUSER", user);
             payload.addProperty("fsPASSWORD", password);
             payload.addProperty("fsENC_KEY", fsencKey);
 
-            String result = OkHttp.postJson(url, new Gson().toJson(payload), headers);
+            String result = OkHttp.post(url, new Gson().toJson(payload), headers);
             JsonObject json = new Gson().fromJson(result, JsonObject.class);
             if (json != null && json.has("Success") && json.get("Success").getAsBoolean()) {
                 return json.getAsJsonObject("Data").get("fsVALUE").getAsString();
@@ -229,6 +350,16 @@ public class GTV extends Spider {
             headers.put("origin", "https://www.4gtv.tv");
             headers.put("referer", "https://www.4gtv.tv/");
             headers.put("User-Agent", ua);
+            
+            // 添加 CloudFlare cookies
+            StringBuilder cookieHeader = new StringBuilder();
+            for (Map.Entry<String, String> entry : cloudflareCookies.entrySet()) {
+                if (cookieHeader.length() > 0) cookieHeader.append("; ");
+                cookieHeader.append(entry.getKey()).append("=").append(entry.getValue());
+            }
+            if (cookieHeader.length() > 0) {
+                headers.put("Cookie", cookieHeader.toString());
+            }
 
             String result = OkHttp.string(url, headers);
             JsonObject json = new Gson().fromJson(result, JsonObject.class);
@@ -275,6 +406,16 @@ public class GTV extends Spider {
                 headers.put("Referer", "https://www.4gtv.tv/");
                 headers.put("User-Agent", ua);
                 headers.put("X-Forwarded-For", "49.159.74.105");
+                
+                // 添加 CloudFlare cookies
+                StringBuilder cookieHeader = new StringBuilder();
+                for (Map.Entry<String, String> entry : cloudflareCookies.entrySet()) {
+                    if (cookieHeader.length() > 0) cookieHeader.append("; ");
+                    cookieHeader.append(entry.getKey()).append("=").append(entry.getValue());
+                }
+                if (cookieHeader.length() > 0) {
+                    headers.put("Cookie", cookieHeader.toString());
+                }
 
                 JsonObject clsApp = new JsonObject();
                 clsApp.addProperty("fsVALUE", fsValue);
@@ -286,7 +427,7 @@ public class GTV extends Spider {
                 payload.addProperty("fsASSET_ID", channelId);
                 payload.addProperty("fsDEVICE_TYPE", "mobile");
 
-                String result = OkHttp.postJson(url, new Gson().toJson(payload), headers);
+                String result = OkHttp.post(url, new Gson().toJson(payload), headers);
                 JsonObject json = new Gson().fromJson(result, JsonObject.class);
                 if (json != null && json.has("Success") && json.get("Success").getAsBoolean()) {
                     JsonObject data = json.getAsJsonObject("Data");
