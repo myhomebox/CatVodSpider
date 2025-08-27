@@ -2,10 +2,9 @@ package com.github.catvod.spider;
 
 import android.content.Context;
 import android.util.Base64;
+import android.util.Log;
 
 import com.github.catvod.crawler.Spider;
-import com.github.catvod.net.OkHttp;
-import com.github.catvod.net.OkResult;
 import com.github.catvod.utils.Util;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -36,6 +35,7 @@ import javax.crypto.spec.SecretKeySpec;
 
 public class GTVSpider extends Spider {
 
+    private static final String TAG = "GTVSpider";
     private static final String DEFAULT_USER_AGENT = "%E5%9B%9B%E5%AD%A3%E7%B7%9A%E4%B8%8A/4 CFNetwork/3826.500.131 Darwin/24.5.0";
     private static final int DEFAULT_TIMEOUT = 10;
     private static final long CACHE_TTL = 2 * 3600 * 1000; // 2小时有效期
@@ -55,12 +55,16 @@ public class GTVSpider extends Spider {
 
     @Override
     public void init(Context context, String extend) {
+        Log.d(TAG, "初始化GTVSpider，参数: " + extend);
         try {
             JSONObject json = new JSONObject(extend);
             user = json.optString("user", "");
             password = json.optString("password", "");
             token = json.optString("token", "");
+            
+            Log.d(TAG, "用户: " + user + ", 密码: " + (password.isEmpty() ? "空" : "已设置") + ", 令牌: " + (token.isEmpty() ? "空" : "已设置"));
         } catch (JSONException e) {
+            Log.e(TAG, "解析初始化参数失败", e);
             user = "";
             password = "";
             token = "";
@@ -89,6 +93,7 @@ public class GTVSpider extends Spider {
 
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) {
+        Log.d(TAG, "播放内容请求: " + id);
         if (id != null && id.startsWith("proxy://")) {
             return handleProxy(id);
         }
@@ -96,6 +101,7 @@ public class GTVSpider extends Spider {
     }
 
     private String handleProxy(String url) {
+        Log.d(TAG, "处理代理请求: " + url);
         try {
             Map<String, String> params = parseProxyUrl(url);
             String channelId = params.get("id");
@@ -108,6 +114,7 @@ public class GTVSpider extends Spider {
                 return handleLITVChannel(channelId, type);
             }
         } catch (Exception e) {
+            Log.e(TAG, "处理代理请求失败", e);
             return "{\"error\":\"" + e.getMessage() + "\"}";
         }
         return "{}";
@@ -124,18 +131,21 @@ public class GTVSpider extends Spider {
                     params.put(keyValue[0], keyValue[1]);
                 }
             }
+            Log.d(TAG, "解析代理URL参数: " + params);
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.e(TAG, "解析代理URL失败", e);
         }
         return params;
     }
 
     private String handle4GTVChannel(String channelId, String type) {
+        Log.d(TAG, "处理4GTV频道: " + channelId + ", 类型: " + type);
         try {
             long now = System.currentTimeMillis();
             CacheEntry entry = cache.get(channelId);
             
             if (entry != null && now - entry.timestamp < CACHE_TTL) {
+                Log.d(TAG, "使用缓存中的URL: " + entry.url);
                 return buildPlayResult(entry.url, type);
             }
             
@@ -151,7 +161,7 @@ public class GTVSpider extends Spider {
             String fnChannelId = channels.get(channelId);
             
             if (fnChannelId == null || fnChannelId.isEmpty()) {
-                throw new Exception("频道未找到");
+                throw new Exception("频道未找到: " + channelId);
             }
             
             String masterUrl = get4GTVChannelUrl(channelId, fnChannelId, fsValue, fsencKey, authVal);
@@ -163,24 +173,32 @@ public class GTVSpider extends Spider {
             
             cache.put(channelId, new CacheEntry(now, highestUrl));
             
+            Log.d(TAG, "获取到播放URL: " + highestUrl);
             return buildPlayResult(highestUrl, type);
         } catch (Exception e) {
+            Log.e(TAG, "处理4GTV频道失败", e);
             return "{\"error\":\"" + e.getMessage() + "\"}";
         }
     }
 
     private String handleLITVChannel(String channelId, String type) {
+        Log.d(TAG, "处理LITV频道: " + channelId + ", 类型: " + type);
         try {
             if (!LITV_VIDEO_SOUND_MAPPING.containsKey(channelId)) {
-                throw new Exception("LITV频道未找到");
+                throw new Exception("LITV频道未找到: " + channelId);
             }
             
             if ("ts".equals(type)) {
-                return buildPlayResult(generateLITVTsUrl(channelId), type);
+                String tsUrl = generateLITVTsUrl(channelId);
+                Log.d(TAG, "生成LITV TS URL: " + tsUrl);
+                return buildPlayResult(tsUrl, type);
             } else {
-                return buildPlayResult(generateLITVM3U8(channelId), type);
+                String m3u8Content = generateLITVM3U8(channelId);
+                Log.d(TAG, "生成LITV M3U8内容");
+                return buildPlayResult(m3u8Content, type);
             }
         } catch (Exception e) {
+            Log.e(TAG, "处理LITV频道失败", e);
             return "{\"error\":\"" + e.getMessage() + "\"}";
         }
     }
@@ -239,11 +257,13 @@ public class GTVSpider extends Spider {
             result.addProperty("url", url);
             return new Gson().toJson(result);
         } catch (Exception e) {
+            Log.e(TAG, "构建播放结果失败", e);
             return "{\"error\":\"构建播放结果失败: " + e.getMessage() + "\"}";
         }
     }
 
     public String liveContent(Map<String, String> params) {
+        Log.d(TAG, "生成直播内容");
         try {
             StringBuilder sb = new StringBuilder();
             sb.append("4GTV,#genre#\n");
@@ -264,8 +284,11 @@ public class GTVSpider extends Spider {
                 sb.append(channelName).append(",").append(proxyUrl).append("\n");
             }
             
-            return sb.toString();
+            String result = sb.toString();
+            Log.d(TAG, "生成的直播内容: " + result);
+            return result;
         } catch (Exception e) {
+            Log.e(TAG, "生成直播内容失败", e);
             return "4GTV,#genre#\n错误," + e.getMessage() + "\n";
         }
     }
@@ -307,7 +330,7 @@ public class GTVSpider extends Spider {
             byte[] hash = digest.digest((today + decryptedStr).getBytes(StandardCharsets.UTF_8));
             return Base64.encodeToString(hash, Base64.NO_WRAP);
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.e(TAG, "生成4GTV认证失败", e);
             return "";
         }
     }
@@ -334,12 +357,14 @@ public class GTVSpider extends Spider {
                 JSONObject json = new JSONObject(response);
                 if (json.optBoolean("Success", false)) {
                     return json.getJSONObject("Data").optString("fsVALUE", "");
+                } else {
+                    Log.e(TAG, "登录失败，响应: " + response);
                 }
             }
             
             return null;
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.e(TAG, "4GTV登录失败", e);
             return null;
         }
     }
@@ -369,12 +394,13 @@ public class GTVSpider extends Spider {
                         }
                     }
                 }
+                Log.d(TAG, "获取到频道数量: " + channels.size());
                 return channels;
             }
             
             return new HashMap<>();
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.e(TAG, "获取频道列表失败", e);
             return new HashMap<>();
         }
     }
@@ -414,12 +440,14 @@ public class GTVSpider extends Spider {
                     if (urls.length() > 1) {
                         return urls.getString(1);
                     }
+                } else {
+                    Log.e(TAG, "获取频道URL失败，响应: " + response);
                 }
             }
             
             return null;
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.e(TAG, "获取4GTV频道URL失败", e);
             return null;
         }
     }
@@ -432,9 +460,10 @@ public class GTVSpider extends Spider {
 
     // 使用 Java 标准库实现 HTTP GET 请求
     private String httpGet(String urlString, Map<String, String> headers) {
+        HttpURLConnection connection = null;
         try {
             URL url = new URL(urlString);
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod("GET");
             connection.setConnectTimeout(DEFAULT_TIMEOUT * 1000);
             connection.setReadTimeout(DEFAULT_TIMEOUT * 1000);
@@ -456,18 +485,25 @@ public class GTVSpider extends Spider {
                 in.close();
                 
                 return response.toString();
+            } else {
+                Log.e(TAG, "HTTP GET 请求失败，响应码: " + responseCode + ", URL: " + urlString);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.e(TAG, "HTTP GET 请求异常", e);
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
         }
         return null;
     }
 
     // 使用 Java 标准库实现 HTTP POST 请求
     private String httpPost(String urlString, String jsonData, Map<String, String> headers) {
+        HttpURLConnection connection = null;
         try {
             URL url = new URL(urlString);
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(DEFAULT_TIMEOUT * 1000);
             connection.setReadTimeout(DEFAULT_TIMEOUT * 1000);
@@ -495,9 +531,15 @@ public class GTVSpider extends Spider {
                 in.close();
                 
                 return response.toString();
+            } else {
+                Log.e(TAG, "HTTP POST 请求失败，响应码: " + responseCode + ", URL: " + urlString);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.e(TAG, "HTTP POST 请求异常", e);
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
         }
         return null;
     }
