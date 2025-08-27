@@ -5,6 +5,7 @@ import android.util.Base64;
 
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.net.OkHttp;
+import com.github.catvod.net.OkResult;
 import com.github.catvod.utils.Util;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -173,8 +174,10 @@ public class GTV extends Spider {
                     headers.put("Cookie", cookieHeader.toString());
                 }
                 
-                String content = OkHttp.string(url, headers);
-                return new Object[]{200, "application/vnd.apple.mpegurl", new java.io.ByteArrayInputStream(content.getBytes())};
+                OkResult result = OkHttp.get(url, headers);
+                if (result != null && result.isSuccessful()) {
+                    return new Object[]{200, "application/vnd.apple.mpegurl", new java.io.ByteArrayInputStream(result.getBody().getBytes())};
+                }
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -188,26 +191,29 @@ public class GTV extends Spider {
             Map<String, String> headers = new HashMap<>();
             headers.put("User-Agent", DEFAULT_USER_AGENT);
             
-            String response = OkHttp.string("https://www.4gtv.tv/", headers);
-            
-            // 尝试从响应中提取 cookies
-            // 注意: 这里简化处理，实际可能需要解析 Set-Cookie 头
-            if (response != null) {
-                // 尝试获取清除挑战 cookie
-                try {
-                    String jsChallenge = extractJsChallenge(response);
-                    if (jsChallenge != null) {
-                        String answer = solveJsChallenge(jsChallenge);
-                        if (answer != null) {
-                            // 提交答案获取验证 cookie
-                            String verifyUrl = "https://www.4gtv.tv/cdn-cgi/challenge-platform/h/g/flow/ov1/" + 
-                                              "0.1:10000000:" + System.currentTimeMillis() + ":" + answer;
-                            OkHttp.string(verifyUrl, headers);
+            OkResult result = OkHttp.get("https://www.4gtv.tv/", headers);
+            if (result != null && result.isSuccessful()) {
+                String response = result.getBody();
+                
+                // 尝试从响应中提取 cookies
+                // 注意: 这里简化处理，实际可能需要解析 Set-Cookie 头
+                if (response != null) {
+                    // 尝试获取清除挑战 cookie
+                    try {
+                        String jsChallenge = extractJsChallenge(response);
+                        if (jsChallenge != null) {
+                            String answer = solveJsChallenge(jsChallenge);
+                            if (answer != null) {
+                                // 提交答案获取验证 cookie
+                                String verifyUrl = "https://www.4gtv.tv/cdn-cgi/challenge-platform/h/g/flow/ov1/" + 
+                                                  "0.1:10000000:" + System.currentTimeMillis() + ":" + answer;
+                                OkHttp.get(verifyUrl, headers);
+                            }
                         }
+                    } catch (Exception e) {
+                        // 如果 JS 挑战解析失败，继续使用基本 cookies
+                        e.printStackTrace();
                     }
-                } catch (Exception e) {
-                    // 如果 JS 挑战解析失败，继续使用基本 cookies
-                    e.printStackTrace();
                 }
             }
         } catch (Exception e) {
@@ -330,10 +336,13 @@ public class GTV extends Spider {
             payload.addProperty("fsPASSWORD", password);
             payload.addProperty("fsENC_KEY", fsencKey);
 
-            String result = OkHttp.post(url, new Gson().toJson(payload), headers);
-            JsonObject json = new Gson().fromJson(result, JsonObject.class);
-            if (json != null && json.has("Success") && json.get("Success").getAsBoolean()) {
-                return json.getAsJsonObject("Data").get("fsVALUE").getAsString();
+            OkResult okResult = OkHttp.post(url, new Gson().toJson(payload), headers);
+            if (okResult != null && okResult.isSuccessful()) {
+                String result = okResult.getBody();
+                JsonObject json = new Gson().fromJson(result, JsonObject.class);
+                if (json != null && json.has("Success") && json.get("Success").getAsBoolean()) {
+                    return json.getAsJsonObject("Data").get("fsVALUE").getAsString();
+                }
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -361,19 +370,22 @@ public class GTV extends Spider {
                 headers.put("Cookie", cookieHeader.toString());
             }
 
-            String result = OkHttp.string(url, headers);
-            JsonObject json = new Gson().fromJson(result, JsonObject.class);
-            if (json != null && json.has("Success") && json.get("Success").getAsBoolean()) {
-                JsonArray data = json.getAsJsonArray("Data");
-                for (JsonElement item : data) {
-                    JsonObject obj = item.getAsJsonObject();
-                    Channel channel = new Channel();
-                    channel.fs4GTV_ID = obj.has("fs4GTV_ID") ? obj.get("fs4GTV_ID").getAsString() : "";
-                    channel.fsNAME = obj.has("fsNAME") ? obj.get("fsNAME").getAsString() : "";
-                    channel.fsTYPE_NAME = obj.has("fsTYPE_NAME") ? obj.get("fsTYPE_NAME").getAsString() : "";
-                    channel.fsLOGO_MOBILE = obj.has("fsLOGO_MOBILE") ? obj.get("fsLOGO_MOBILE").getAsString() : "";
-                    channel.fnID = obj.has("fnID") ? obj.get("fnID").getAsString() : "";
-                    channels.add(channel);
+            OkResult result = OkHttp.get(url, headers);
+            if (result != null && result.isSuccessful()) {
+                String response = result.getBody();
+                JsonObject json = new Gson().fromJson(response, JsonObject.class);
+                if (json != null && json.has("Success") && json.get("Success").getAsBoolean()) {
+                    JsonArray data = json.getAsJsonArray("Data");
+                    for (JsonElement item : data) {
+                        JsonObject obj = item.getAsJsonObject();
+                        Channel channel = new Channel();
+                        channel.fs4GTV_ID = obj.has("fs4GTV_ID") ? obj.get("fs4GTV_ID").getAsString() : "";
+                        channel.fsNAME = obj.has("fsNAME") ? obj.get("fsNAME").getAsString() : "";
+                        channel.fsTYPE_NAME = obj.has("fsTYPE_NAME") ? obj.get("fsTYPE_NAME").getAsString() : "";
+                        channel.fsLOGO_MOBILE = obj.has("fsLOGO_MOBILE") ? obj.get("fsLOGO_MOBILE").getAsString() : "";
+                        channel.fnID = obj.has("fnID") ? obj.get("fnID").getAsString() : "";
+                        channels.add(channel);
+                    }
                 }
             }
         } catch (Exception e) {
@@ -427,17 +439,20 @@ public class GTV extends Spider {
                 payload.addProperty("fsASSET_ID", channelId);
                 payload.addProperty("fsDEVICE_TYPE", "mobile");
 
-                String result = OkHttp.post(url, new Gson().toJson(payload), headers);
-                JsonObject json = new Gson().fromJson(result, JsonObject.class);
-                if (json != null && json.has("Success") && json.get("Success").getAsBoolean()) {
-                    JsonObject data = json.getAsJsonObject("Data");
-                    if (data != null && data.has("flstURLs")) {
-                        JsonArray urls = data.getAsJsonArray("flstURLs");
-                        if (urls.size() > 1) {
-                            String streamUrl = urls.get(1).getAsString();
-                            // Update cache
-                            cachePlayUrls.put(cacheKey, new CacheItem(System.currentTimeMillis(), streamUrl));
-                            return streamUrl;
+                OkResult okResult = OkHttp.post(url, new Gson().toJson(payload), headers);
+                if (okResult != null && okResult.isSuccessful()) {
+                    String result = okResult.getBody();
+                    JsonObject json = new Gson().fromJson(result, JsonObject.class);
+                    if (json != null && json.has("Success") && json.get("Success").getAsBoolean()) {
+                        JsonObject data = json.getAsJsonObject("Data");
+                        if (data != null && data.has("flstURLs")) {
+                            JsonArray urls = data.getAsJsonArray("flstURLs");
+                            if (urls.size() > 1) {
+                                String streamUrl = urls.get(1).getAsString();
+                                // Update cache
+                                cachePlayUrls.put(cacheKey, new CacheItem(System.currentTimeMillis(), streamUrl));
+                                return streamUrl;
+                            }
                         }
                     }
                 }
