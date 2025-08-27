@@ -174,10 +174,9 @@ public class GTV extends Spider {
                     headers.put("Cookie", cookieHeader.toString());
                 }
                 
-                OkResult result = OkHttp.get(url, headers);
-                if (result != null) {
-                    return new Object[]{200, "application/vnd.apple.mpegurl", new java.io.ByteArrayInputStream(result.getBody().getBytes())};
-                }
+                // 使用 OkHttp.string 方法，它接受 URL 和 headers
+                String content = OkHttp.string(url, headers);
+                return new Object[]{200, "application/vnd.apple.mpegurl", new java.io.ByteArrayInputStream(content.getBytes())};
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -191,29 +190,27 @@ public class GTV extends Spider {
             Map<String, String> headers = new HashMap<>();
             headers.put("User-Agent", DEFAULT_USER_AGENT);
             
-            OkResult result = OkHttp.get("https://www.4gtv.tv/", headers);
-            if (result != null) {
-                String response = result.getBody();
-                
-                // 尝试从响应中提取 cookies
-                // 注意: 这里简化处理，实际可能需要解析 Set-Cookie 头
-                if (response != null) {
-                    // 尝试获取清除挑战 cookie
-                    try {
-                        String jsChallenge = extractJsChallenge(response);
-                        if (jsChallenge != null) {
-                            String answer = solveJsChallenge(jsChallenge);
-                            if (answer != null) {
-                                // 提交答案获取验证 cookie
-                                String verifyUrl = "https://www.4gtv.tv/cdn-cgi/challenge-platform/h/g/flow/ov1/" + 
-                                                  "0.1:10000000:" + System.currentTimeMillis() + ":" + answer;
-                                OkHttp.get(verifyUrl, headers);
-                            }
+            // 使用 OkHttp.string 方法
+            String response = OkHttp.string("https://www.4gtv.tv/", headers);
+            
+            // 尝试从响应中提取 cookies
+            if (response != null) {
+                // 尝试获取清除挑战 cookie
+                try {
+                    String jsChallenge = extractJsChallenge(response);
+                    if (jsChallenge != null) {
+                        String answer = solveJsChallenge(jsChallenge);
+                        if (answer != null) {
+                            // 提交答案获取验证 cookie
+                            String verifyUrl = "https://www.4gtv.tv/cdn-cgi/challenge-platform/h/g/flow/ov1/" + 
+                                              "0.1:10000000:" + System.currentTimeMillis() + ":" + answer;
+                            // 使用 OkHttp.string 方法
+                            OkHttp.string(verifyUrl, headers);
                         }
-                    } catch (Exception e) {
-                        // 如果 JS 挑战解析失败，继续使用基本 cookies
-                        e.printStackTrace();
                     }
+                } catch (Exception e) {
+                    // 如果 JS 挑战解析失败，继续使用基本 cookies
+                    e.printStackTrace();
                 }
             }
         } catch (Exception e) {
@@ -336,6 +333,7 @@ public class GTV extends Spider {
             payload.addProperty("fsPASSWORD", password);
             payload.addProperty("fsENC_KEY", fsencKey);
 
+            // 使用 OkHttp.post 方法，它接受 URL、JSON 字符串和 headers
             OkResult okResult = OkHttp.post(url, new Gson().toJson(payload), headers);
             if (okResult != null) {
                 String result = okResult.getBody();
@@ -370,22 +368,20 @@ public class GTV extends Spider {
                 headers.put("Cookie", cookieHeader.toString());
             }
 
-            OkResult result = OkHttp.get(url, headers);
-            if (result != null) {
-                String response = result.getBody();
-                JsonObject json = new Gson().fromJson(response, JsonObject.class);
-                if (json != null && json.has("Success") && json.get("Success").getAsBoolean()) {
-                    JsonArray data = json.getAsJsonArray("Data");
-                    for (JsonElement item : data) {
-                        JsonObject obj = item.getAsJsonObject();
-                        Channel channel = new Channel();
-                        channel.fs4GTV_ID = obj.has("fs4GTV_ID") ? obj.get("fs4GTV_ID").getAsString() : "";
-                        channel.fsNAME = obj.has("fsNAME") ? obj.get("fsNAME").getAsString() : "";
-                        channel.fsTYPE_NAME = obj.has("fsTYPE_NAME") ? obj.get("fsTYPE_NAME").getAsString() : "";
-                        channel.fsLOGO_MOBILE = obj.has("fsLOGO_MOBILE") ? obj.get("fsLOGO_MOBILE").getAsString() : "";
-                        channel.fnID = obj.has("fnID") ? obj.get("fnID").getAsString() : "";
-                        channels.add(channel);
-                    }
+            // 使用 OkHttp.string 方法
+            String response = OkHttp.string(url, headers);
+            JsonObject json = new Gson().fromJson(response, JsonObject.class);
+            if (json != null && json.has("Success") && json.get("Success").getAsBoolean()) {
+                JsonArray data = json.getAsJsonArray("Data");
+                for (JsonElement item : data) {
+                    JsonObject obj = item.getAsJsonObject();
+                    Channel channel = new Channel();
+                    channel.fs4GTV_ID = obj.has("fs4GTV_ID") ? obj.get("fs4GTV_ID").getAsString() : "";
+                    channel.fsNAME = obj.has("fsNAME") ? obj.get("fsNAME").getAsString() : "";
+                    channel.fsTYPE_NAME = obj.has("fsTYPE_NAME") ? obj.get("fsTYPE_NAME").getAsString() : "";
+                    channel.fsLOGO_MOBILE = obj.has("fsLOGO_MOBILE") ? obj.get("fsLOGO_MOBILE").getAsString() : "";
+                    channel.fnID = obj.has("fnID") ? obj.get("fnID").getAsString() : "";
+                    channels.add(channel);
                 }
             }
         } catch (Exception e) {
@@ -439,6 +435,7 @@ public class GTV extends Spider {
                 payload.addProperty("fsASSET_ID", channelId);
                 payload.addProperty("fsDEVICE_TYPE", "mobile");
 
+                // 使用 OkHttp.post 方法
                 OkResult okResult = OkHttp.post(url, new Gson().toJson(payload), headers);
                 if (okResult != null) {
                     String result = okResult.getBody();
