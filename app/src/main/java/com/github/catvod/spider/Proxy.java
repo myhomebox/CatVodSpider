@@ -17,6 +17,8 @@ public class Proxy {
         switch (params.get("do")) {
             case "ck":
                 return new Object[]{200, "text/plain; charset=utf-8", new ByteArrayInputStream("ok".getBytes(StandardCharsets.UTF_8))};
+            case "gtv":
+                return GTVSpider.proxy(params);
             case "mqitv":
                 return MQiTV.proxy(params);
             case "bili":
