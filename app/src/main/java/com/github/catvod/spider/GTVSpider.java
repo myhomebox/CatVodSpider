@@ -5,6 +5,7 @@ import android.util.Base64;
 
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.net.OkHttp;
+import com.github.catvod.net.OkResult;
 import com.github.catvod.utils.Util;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -238,8 +239,7 @@ public class GTVSpider extends Spider {
         }
     }
 
-    @Override
-    public String liveContent() {
+    public String liveContent(Map<String, String> params) {
         try {
             StringBuilder sb = new StringBuilder();
             sb.append("4GTV,#genre#\n");
@@ -325,11 +325,12 @@ public class GTVSpider extends Spider {
             payload.put("fsPASSWORD", password);
             payload.put("fsENC_KEY", fsencKey);
             
-            String response = OkHttp.post(url, payload.toString(), headers);
-            JSONObject json = new JSONObject(response);
-            
-            if (json.optBoolean("Success", false)) {
-                return json.getJSONObject("Data").optString("fsVALUE", "");
+            OkResult result = OkHttp.post(url, payload.toString(), headers);
+            if (result != null && result.code == 200) {
+                JSONObject json = new JSONObject(result.body);
+                if (json.optBoolean("Success", false)) {
+                    return json.getJSONObject("Data").optString("fsVALUE", "");
+                }
             }
             
             return null;
@@ -349,23 +350,25 @@ public class GTVSpider extends Spider {
             headers.put("referer", "https://www.4gtv.tv/");
             headers.put("User-Agent", DEFAULT_USER_AGENT);
             
-            String response = OkHttp.get(url, headers);
-            JSONObject json = new JSONObject(response);
-            
-            Map<String, String> channels = new HashMap<>();
-            if (json.optBoolean("Success", false)) {
-                JSONArray data = json.getJSONArray("Data");
-                for (int i = 0; i < data.length(); i++) {
-                    JSONObject channel = data.getJSONObject(i);
-                    String channelId = channel.optString("fs4GTV_ID", "");
-                    String fnId = channel.optString("fnID", "");
-                    if (!channelId.isEmpty() && !fnId.isEmpty()) {
-                        channels.put(channelId, fnId);
+            OkResult result = OkHttp.get(url, headers);
+            if (result != null && result.code == 200) {
+                JSONObject json = new JSONObject(result.body);
+                Map<String, String> channels = new HashMap<>();
+                if (json.optBoolean("Success", false)) {
+                    JSONArray data = json.getJSONArray("Data");
+                    for (int i = 0; i < data.length(); i++) {
+                        JSONObject channel = data.getJSONObject(i);
+                        String channelId = channel.optString("fs4GTV_ID", "");
+                        String fnId = channel.optString("fnID", "");
+                        if (!channelId.isEmpty() && !fnId.isEmpty()) {
+                            channels.put(channelId, fnId);
+                        }
                     }
                 }
+                return channels;
             }
             
-            return channels;
+            return new HashMap<>();
         } catch (Exception e) {
             e.printStackTrace();
             return new HashMap<>();
@@ -398,14 +401,15 @@ public class GTVSpider extends Spider {
             payload.put("fsASSET_ID", channelId);
             payload.put("fsDEVICE_TYPE", "mobile");
             
-            String response = OkHttp.post(url, payload.toString(), headers);
-            JSONObject json = new JSONObject(response);
-            
-            if (json.optBoolean("Success", false)) {
-                JSONObject data = json.getJSONObject("Data");
-                JSONArray urls = data.getJSONArray("flstURLs");
-                if (urls.length() > 1) {
-                    return urls.getString(1);
+            OkResult result = OkHttp.post(url, payload.toString(), headers);
+            if (result != null && result.code == 200) {
+                JSONObject json = new JSONObject(result.body);
+                if (json.optBoolean("Success", false)) {
+                    JSONObject data = json.getJSONObject("Data");
+                    JSONArray urls = data.getJSONArray("flstURLs");
+                    if (urls.length() > 1) {
+                        return urls.getString(1);
+                    }
                 }
             }
             
