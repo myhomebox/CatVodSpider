@@ -1,30 +1,57 @@
-rm -f custom_spider.jar
-rm -rf Smali_classes
+name: Spider
 
-java -jar 3rd/baksmali-2.5.2.jar d ../app/build/intermediates/dex/release/minifyReleaseWithR8/classes.dex -o Smali_classes
+jobs:
+  build:
 
-rm -rf spider.jar/smali/com/github/catvod/spider
-rm -rf spider.jar/smali/com/github/catvod/parser
+    runs-on: ubuntu-latest
 
-[ -f spider.jar/smali/com/github/catvod ] || mkdir -p spider.jar/smali/com/github/catvod
+    steps:
+    - uses: actions/checkout@v4
+    - name: set up JDK
+      uses: actions/setup-java@v4
+      with:
+        java-version: '18'
+        distribution: 'temurin'
+        
+    - name: Delete workflows
+      uses: Mattraks/delete-workflow-runs@v2
+      with:
+        token: ${{ github.token }}
+        repository: ${{ github.repository }}
+        retain_days: 0 
+        #The number of days that is used to compare with the retention days of each workflow.
+        keep_minimum_runs: 2 
+        #The minimum runs to keep for each workflow.
 
-if [ "$1" == "ec" ]; then
-    java -Dfile.encoding=utf-8 -jar 3rd/oss.jar Smali_classes
-fi
+- name: Build the Jar
+      working-directory: ./project
+      run: |
+         chmod +x gradlew
+         ./gradlew assemblerelease --build-cache --parallel --daemon --warning-mode all
+         
+    - name: Customize Spider Jar
+      working-directory: ./project
+      run: |        
+         rm -rf jar/custom_spider.jar
+         rm -rf jar/spider.jar/original/META-INF
+         curl -L https://github.com/iBotPeaches/Apktool/releases/download/v2.7.0/apktool_2.7.0.jar > jar/3rd/apktool_2.7.0.jar
+         java -jar jar/3rd/baksmali-2.5.2.jar d app/build/intermediates/dex/release/minifyReleaseWithR8/classes.dex -o jar/Smali_classes
+         mkdir -p jar/spider.jar/smali/com/github/catvod/
+         mv jar/Smali_classes/com/github/catvod/spider jar/spider.jar/smali/com/github/catvod/         
+         java -jar jar/3rd/apktool_2.7.0.jar b jar/spider.jar -c
+         mv jar/spider.jar/dist/dex.jar ../jar/custom_spider.jar
+         #md5=($(md5sum ../jar/custom_spider.jar))
+         echo $(md5sum ../jar/custom_spider.jar | awk '{print $1}') > ../jar/custom_spider.jar.md5
+         
+    - name: Upload APK
+      uses: actions/upload-artifact@main
+      with:
+        name: Spider
+        path: ./jar/custom_spider.jar
 
-mv Smali_classes/com/github/catvod/spider spider.jar/smali/com/github/catvod
-mv Smali_classes/com/github/catvod/parser spider.jar/smali/com/github/catvod
-
-rm -rf Smali_classes
-
-java -jar 3rd/apktool_2.4.1.jar b spider.jar -c
-
-mv spider.jar/dist/dex.jar custom_spider.jar
-
-md5sum custom_spider.jar | cut -d ' ' -f 1 > custom_spider.jar.md5
-
-rm -rf spider.jar/smali/com/github/catvod/spider
-rm -rf spider.jar/smali/com/github/catvod/parser
-
-rm -rf spider.jar/build
-rm -rf spider.jar/dist
+    - name: Update spider jar      
+      uses: EndBug/add-and-commit@v9.1.3
+      with:
+        default_author: github_actions
+        message: 'update spider'
+        add: "['./jar/custom_spider.jar', './jar/custom_spider.jar.md5', './json/index.json']"
