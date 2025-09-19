@@ -8,7 +8,6 @@ import com.github.catvod.R;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.spider.Init;
 import com.github.catvod.spider.MQiTV;
-import com.github.catvod.spider.Uvod;
 import com.github.catvod.spider.Proxy;
 import com.orhanobut.logger.AndroidLogAdapter;
 import com.orhanobut.logger.Logger;
