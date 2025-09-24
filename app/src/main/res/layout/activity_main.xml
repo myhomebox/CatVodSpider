@@ -1,93 +1,77 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:fillViewport="true">
 
-    <com.google.android.flexbox.FlexboxLayout
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:padding="16dp"
-        app:flexDirection="row"
-        app:flexWrap="wrap"
-        app:justifyContent="flex_start">
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="16dp">
 
         <Button
-            android:id="@+id/home"
+            android:id="@+id/homeContent"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="home"
+            android:text="homeContent"
             android:textAllCaps="false" />
 
         <Button
-            android:id="@+id/homeVideo"
+            android:id="@+id/homeVideoContent"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="homeVideo"
+            android:layout_marginTop="16dp"
+            android:text="homeVideoContent"
             android:textAllCaps="false" />
 
         <Button
-            android:id="@+id/category"
+            android:id="@+id/categoryContent"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="category"
+            android:layout_marginTop="16dp"
+            android:text="categoryContent"
             android:textAllCaps="false" />
 
         <Button
-            android:id="@+id/detail"
+            android:id="@+id/detailContent"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="detail"
+            android:layout_marginTop="16dp"
+            android:text="detailContent"
             android:textAllCaps="false" />
 
         <Button
-            android:id="@+id/player"
+            android:id="@+id/playerContent"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="player"
+            android:layout_marginTop="16dp"
+            android:text="playerContent"
             android:textAllCaps="false" />
 
         <Button
-            android:id="@+id/search"
+            android:id="@+id/searchContent"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="search"
+            android:layout_marginTop="16dp"
+            android:text="searchContent"
             android:textAllCaps="false" />
 
         <Button
-            android:id="@+id/live"
+            android:id="@+id/liveContent"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="live"
+            android:layout_marginTop="16dp"
+            android:text="liveContent"
             android:textAllCaps="false" />
 
         <Button
             android:id="@+id/proxy"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
             android:text="proxy"
             android:textAllCaps="false" />
 
-    </com.google.android.flexbox.FlexboxLayout>
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="0.5dp"
-        android:background="#000000" />
-
-    <androidx.core.widget.NestedScrollView
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:fillViewport="true">
-
-        <TextView
-            android:id="@+id/result"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:padding="16dp"
-            android:textColor="#000000"
-            android:textSize="14sp" />
-
-    </androidx.core.widget.NestedScrollView>
-</LinearLayout>
+    </LinearLayout>
+</ScrollView>
