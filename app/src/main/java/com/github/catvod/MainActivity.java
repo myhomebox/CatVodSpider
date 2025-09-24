@@ -6,6 +6,7 @@ import android.os.Bundle;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.databinding.ActivityMainBinding;
 import com.github.catvod.spider.Init;
+import com.github.catvod.spider.MQiTV;
 import com.github.catvod.spider.PTT;
 import com.github.catvod.spider.Proxy;
 import com.google.gson.Gson;
