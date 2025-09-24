@@ -60,6 +60,7 @@ public class MainActivity extends Activity {
     private void initSpider() {
         try {
             Init.init(getApplicationContext());
+            spider = new MQiTV();
             spider.init(this, "");
         } catch (Throwable e) {
             e.printStackTrace();
